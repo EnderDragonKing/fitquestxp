@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { auth, db } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, deleteDoc, getDocs, collection } from "firebase/firestore";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const RANKS = [
@@ -117,8 +117,6 @@ const ONBOARDING_STEPS = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getTodayStr() { return new Date().toISOString().slice(0,10); }
-function isValidEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
-function storageKey(email) { return "fitxp_user_"+email.toLowerCase().trim(); }
 function haptic(pattern=[10]) { try { if(navigator.vibrate) navigator.vibrate(pattern); } catch {} }
 
 const BLOCKED_WORDS = [
@@ -710,19 +708,17 @@ function GlobalLeaderboardTab({userEmail,userXp,userStreak,username,avatar,TH}) 
     async function load(){
       setLoading(true);
       try{
-        const keys=await window.storage.list("fitxp_lb_",true);
-        const entries=[];
-        if(keys&&keys.keys){
-          for(const key of keys.keys.slice(0,50)){
-            try{const r=await window.storage.get(key,true);if(r&&r.value)entries.push(JSON.parse(r.value));}catch{}
-          }
-        }
-        const me={id:userEmail,name:displayName,xp:userXp,streak:userStreak,avatar:avatar||"⚔️",isMe:true};
+        const snapshot = await getDocs(collection(db,"leaderboard"));
+        const entries = [];
+        snapshot.forEach(doc=>entries.push(doc.data()));
+        const me={id:userEmail,name:displayName,xp:userXp,streak:userStreak,avatar:avatar||"💀",isMe:true};
         setAllEntries([...entries.filter(e=>e.id!==userEmail),me].sort((a,b)=>b.xp-a.xp));
-      }catch{setAllEntries([{id:userEmail,name:displayName,xp:userXp,streak:userStreak,avatar:avatar||"⚔️",isMe:true}]);}
+      }catch{
+        setAllEntries([{id:userEmail,name:displayName,xp:userXp,streak:userStreak,avatar:avatar||"💀",isMe:true}]);
+      }
       setLoading(false);
     }
-    async function save(){try{await window.storage.set("fitxp_lb_"+userEmail,JSON.stringify({id:userEmail,name:displayName,xp:userXp,streak:userStreak,avatar:avatar||"⚔️",isMe:false}),true);}catch{}}
+    async function save(){try{await setDoc(doc(db,"leaderboard",userEmail),{id:userEmail,name:displayName,xp:userXp,streak:userStreak,avatar:avatar||"💀",isMe:false});}catch{}};
     save().then(load);
   },[userEmail,userXp,userStreak,displayName,avatar]);
   const myPos=allEntries.findIndex(e=>e.isMe)+1;
@@ -901,15 +897,15 @@ function SettingsTab({appData,userEmail,isDark,onToggleTheme,notifEnabled,onTogg
                 if(isUsernameBlocked(val)){setUsernameStatus("blocked");return;}
                 if(val.trim().length>=3&&/^[a-zA-Z0-9_]+$/.test(val.trim())){
                   setUsernameStatus("checking");
-                  try{const taken=await window.storage.get("fitxp_username_"+val.trim().toLowerCase(),true);setUsernameStatus(taken&&taken.value?"taken":"available");}catch{setUsernameStatus("available");}
+                  try{const snap=await getDoc(doc(db,"usernames",val.trim().toLowerCase()));setUsernameStatus(snap.exists()?"taken":"available");}catch{setUsernameStatus("available");}
                 }
               }}/>
             <button onClick={async()=>{
               if(usernameStatus!=="available")return;
               try{
                 const old=(appData.username||"").toLowerCase();
-                if(old)await window.storage.delete("fitxp_username_"+old,true).catch(()=>{});
-                await window.storage.set("fitxp_username_"+newUsername.trim().toLowerCase(),userEmail,true);
+                if(old)await deleteDoc(doc(db,"usernames",old)).catch(()=>{});
+                await setDoc(doc(db,"usernames",newUsername.trim().toLowerCase()),{email:userEmail});
                 onUsernameChange(newUsername.trim()); setNewUsername(""); setUsernameStatus("idle");
                 showNotif(`Username changed to ${newUsername.trim()} ✓`);
               }catch{setUsernameStatus("error");}
@@ -1004,7 +1000,6 @@ export default function App() {
               handleLogin(savedEmail, snap.data(), false, null, null, user.uid);
             }
           }catch(err){
-            console.log("Auto login error:", err.message);
           }
         }
       }
@@ -1049,17 +1044,13 @@ export default function App() {
     saveTimer.current=setTimeout(async()=>{
       try{
         const userId=localStorage.getItem("fitxp_user_id");
-        console.log("Saving... userId:", userId);
         if(userId){ 
           await setDoc(doc(db,"users",userId),appData);
-          console.log("Saved successfully!");
         } else {
-          console.log("No userId found!");
         }
         setSaveStatus("saved");
       }
       catch(err){
-        console.log("Save error:", err.message);
         setSaveStatus("error");
       }
     },800);
