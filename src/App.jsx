@@ -6,9 +6,9 @@ import { doc, setDoc, getDoc, deleteDoc, getDocs, collection } from "firebase/fi
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const RANKS = [
-  { name:"Recruit",      minXP:0,      maxXP:199,    color:"#8B7355", bg:"#2a1f0e", icon:"🪨", glow:"#8B7355" },
-  { name:"Bronze",       minXP:200,    maxXP:599,    color:"#CD7F32", bg:"#2a1500", icon:"🥉", glow:"#CD7F32" },
-  { name:"Silver",       minXP:600,    maxXP:1499,   color:"#C0C0C0", bg:"#1a1a2e", icon:"🥈", glow:"#C0C0C0" },
+  { name:"Recruit",      minXP:0,      maxXP:499,    color:"#8B7355", bg:"#2a1f0e", icon:"🪨", glow:"#8B7355" },
+  { name:"Bronze",       minXP:500,    maxXP:999,    color:"#CD7F32", bg:"#2a1500", icon:"🥉", glow:"#CD7F32" },
+  { name:"Silver",       minXP:1000,    maxXP:1499,   color:"#C0C0C0", bg:"#1a1a2e", icon:"🥈", glow:"#C0C0C0" },
   { name:"Gold",         minXP:1500,   maxXP:3499,   color:"#FFD700", bg:"#1a1400", icon:"🥇", glow:"#FFD700" },
   { name:"Platinum",     minXP:3500,   maxXP:6999,   color:"#00CFCF", bg:"#001a1a", icon:"💎", glow:"#00CFCF" },
   { name:"Diamond",      minXP:7000,   maxXP:14999,  color:"#66CCFF", bg:"#001020", icon:"💠", glow:"#66CCFF" },
