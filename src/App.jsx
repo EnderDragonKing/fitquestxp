@@ -165,7 +165,8 @@ function checkAchievements(data) {
   check("streak_30",data.streak>=30);
   check("habits_10",(data.totalHabitsCompleted||0)>=10);
   check("habits_50",(data.totalHabitsCompleted||0)>=50);
-  check("habits_100",(data.totalHabitsCompleted||0)>=100);
+  check("habits_100",(data.totalHabitsCompleted||0)>=100);~
+  check("perfect_day",data.habits&&data.habits.length>0&&data.habits.every(h=>h.completedToday));
   check("rank_bronze",data.xp>=200);
   check("rank_silver",data.xp>=600);
   check("rank_gold",data.xp>=1500);
@@ -780,7 +781,7 @@ function FriendsTab({userEmail,userXp,userStreak,username,avatar,TH}) {
   const [challengeSent,setChallengeSent]=useState({});
   const [copied,setCopied]=useState(false);
   const [linkCopied,setLinkCopied]=useState(null);
-  const inviteLink=`https://fitquestxp.app/invite?ref=${encodeURIComponent(userEmail||"")}`;
+  const inviteLink=`https://fitquestxp.vercel.app?ref=${encodeURIComponent(userEmail||"")}`;
   const PLATFORMS=[
     {name:"WhatsApp",icon:"💬",color:"#25D366",url:`https://wa.me/?text=Join%20me%20on%20FitQuest%20XP!%20${encodeURIComponent(inviteLink)}`},
     {name:"Telegram",icon:"✈️",color:"#229ED9",url:`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}`},
