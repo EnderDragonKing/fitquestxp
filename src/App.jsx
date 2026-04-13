@@ -718,7 +718,21 @@ function GlobalLeaderboardTab({userEmail,userXp,userStreak,username,avatar,TH}) 
       }
       setLoading(false);
     }
-    async function save(){try{await setDoc(doc(db,"leaderboard",userEmail),{id:userEmail,name:displayName,xp:userXp,streak:userStreak,avatar:avatar||"💀",isMe:false});}catch{}};
+    async function save(){
+      try{
+        const userId=localStorage.getItem("fitxp_user_id");
+        if(!userId){console.log("No userId for leaderboard save");return;}
+        await setDoc(doc(db,"leaderboard",userEmail),{
+          id:userEmail,
+          name:displayName,
+          xp:userXp,
+          streak:userStreak,
+          avatar:avatar||"💀",
+          isMe:false
+        });
+        console.log("Leaderboard saved for:",userEmail);
+      }catch(e){console.log("leaderboard save error",e);}
+    }
     save().then(load);
   },[userEmail,userXp,userStreak,displayName,avatar]);
   const myPos=allEntries.findIndex(e=>e.isMe)+1;
