@@ -990,6 +990,9 @@ export default function App() {
   const [xpPopups,setXpPopups]=useState([]);
   const [showAddModal,setShowAddModal]=useState(false);
   const [newHabit,setNewHabit]=useState({name:"",category:"Custom",xp:25,icon:"⭐",scheduleType:"daily",scheduleDays:[],timeOfDay:"morning"});
+  const [editHabit,setEditHabit]=useState(null);
+  const [showEditModal,setShowEditModal]=useState(false);
+  const longPressTimer=useRef(null);
   const [activeTab,setActiveTab]=useState("habits");
   const [showConfetti,setShowConfetti]=useState(false);
   const [streakBanner,setStreakBanner]=useState(null);
@@ -1160,6 +1163,24 @@ export default function App() {
     });
   }
 
+  function startLongPress(habit){
+  longPressTimer.current=setTimeout(()=>{
+    haptic([30,20,30]);
+    setEditHabit({...habit});
+    setShowEditModal(true);
+  },600);
+  }
+  function endLongPress(){
+    if(longPressTimer.current) clearTimeout(longPressTimer.current);
+  }
+  function saveEditHabit(){
+    if(!editHabit.name.trim()) return;
+    updateData(prev=>({habits:prev.habits.map(h=>h.id===editHabit.id?{...editHabit}:h)}));
+    setShowEditModal(false);
+    setEditHabit(null);
+    showNotif("Habit updated! ✓");
+  }
+
   function addHabit(){if(!newHabit.name.trim())return;updateData(prev=>({habits:[...prev.habits,{...newHabit,id:Date.now(),completedToday:false}]}));setNewHabit({name:"",category:"Custom",xp:25,icon:"⭐",scheduleType:"daily",scheduleDays:[],timeOfDay:"morning"});setShowAddModal(false);}
   function removeHabit(id){updateData(prev=>({habits:prev.habits.filter(h=>h.id!==id)}));}
 
@@ -1268,6 +1289,84 @@ export default function App() {
         </div>
       )}
       {xpPopups.map(p=><XPPopup key={p.id} id={p.id} amount={p.amount}/>)}
+
+      {showEditModal&&editHabit&&(
+        <div className="modal-overlay" onClick={()=>setShowEditModal(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h2 style={{fontFamily:"'Cinzel Decorative',serif",color:"#FFD700",marginBottom:18,fontSize:"1.1rem"}}>✏️ Edit Habit</h2>
+            <label style={{display:"block",color:TH.textMuted,fontSize:".75rem",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Habit Name</label>
+            <input placeholder="e.g. 20 Sit-ups" value={editHabit.name} onChange={e=>setEditHabit(p=>({...p,name:e.target.value}))}/>
+            <label style={{display:"block",color:TH.textMuted,fontSize:".75rem",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Icon (emoji)</label>
+            <input placeholder="⭐" value={editHabit.icon} onChange={e=>setEditHabit(p=>({...p,icon:e.target.value}))}/>
+            <label style={{display:"block",color:TH.textMuted,fontSize:".75rem",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Category</label>
+            <select value={editHabit.category} onChange={e=>setEditHabit(p=>({...p,category:e.target.value}))}>
+              {Object.keys(CATEGORY_COLORS).map(c=><option key={c}>{c}</option>)}
+            </select>
+            <label style={{display:"block",color:TH.textMuted,fontSize:".75rem",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>XP Reward: {editHabit.xp}</label>
+            <input type="range" min="5" max="100" step="5" value={editHabit.xp} onChange={e=>setEditHabit(p=>({...p,xp:parseInt(e.target.value)}))} style={{accentColor:"#FFD700",width:"100%",marginBottom:14}}/>
+
+            {/* Time of Day */}
+            <label style={{display:"block",color:TH.textMuted,fontSize:".75rem",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>Time of Day</label>
+            <div style={{display:"flex",gap:6,marginBottom:14}}>
+              {[{id:"morning",icon:"🌅",label:"Morning"},{id:"afternoon",icon:"☀️",label:"Afternoon"},{id:"night",icon:"🌙",label:"Night"}].map(t=>(
+                <button key={t.id} onClick={()=>setEditHabit(p=>({...p,timeOfDay:t.id}))} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1px solid ${editHabit.timeOfDay===t.id?"#FFD700":TH.border2}`,background:editHabit.timeOfDay===t.id?"linear-gradient(135deg,#1a1400,#2a2000)":"transparent",color:editHabit.timeOfDay===t.id?"#FFD700":TH.textFaint,fontFamily:"'Orbitron',monospace",fontSize:".5rem",cursor:"pointer",textTransform:"uppercase",letterSpacing:"1px",transition:"all .2s",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span style={{fontSize:"1rem"}}>{t.icon}</span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Schedule */}
+            <label style={{display:"block",color:TH.textMuted,fontSize:".75rem",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>Schedule</label>
+            <div style={{display:"flex",gap:6,marginBottom:10}}>
+              {["daily","weekly","monthly"].map(t=>(
+                <button key={t} onClick={()=>setEditHabit(p=>({...p,scheduleType:t,scheduleDays:[]}))} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1px solid ${editHabit.scheduleType===t?"#FFD700":TH.border2}`,background:editHabit.scheduleType===t?"linear-gradient(135deg,#1a1400,#2a2000)":"transparent",color:editHabit.scheduleType===t?"#FFD700":TH.textFaint,fontFamily:"'Orbitron',monospace",fontSize:".55rem",cursor:"pointer",textTransform:"uppercase",letterSpacing:"1px",transition:"all .2s"}}>
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {editHabit.scheduleType==="weekly"&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontFamily:"'Rajdhani',sans-serif",fontSize:".8rem",color:TH.textMuted,marginBottom:6}}>Pick which days of the week:</div>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                  {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>{
+                    const sel=(editHabit.scheduleDays||[]).includes(i);
+                    return (
+                      <button key={d} onClick={()=>setEditHabit(p=>({...p,scheduleDays:sel?p.scheduleDays.filter(x=>x!==i):[...(p.scheduleDays||[]),i]}))}
+                        style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${sel?"#FFD700":TH.border2}`,background:sel?"linear-gradient(135deg,#1a1400,#2a2000)":"transparent",color:sel?"#FFD700":TH.textMuted,fontFamily:"'Orbitron',monospace",fontSize:".55rem",cursor:"pointer",transition:"all .15s"}}>
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {editHabit.scheduleType==="monthly"&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontFamily:"'Rajdhani',sans-serif",fontSize:".8rem",color:TH.textMuted,marginBottom:6}}>Pick which days of the month:</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,maxHeight:140,overflowY:"auto"}}>
+                  {Array.from({length:31},(_,i)=>i+1).map(day=>{
+                    const sel=(editHabit.scheduleDays||[]).includes(day);
+                    return (
+                      <button key={day} onClick={()=>setEditHabit(p=>({...p,scheduleDays:sel?p.scheduleDays.filter(x=>x!==day):[...(p.scheduleDays||[]),day]}))}
+                        style={{padding:"5px 2px",borderRadius:6,border:`1px solid ${sel?"#FFD700":TH.border2}`,background:sel?"linear-gradient(135deg,#1a1400,#2a2000)":"transparent",color:sel?"#FFD700":TH.textMuted,fontFamily:"'Orbitron',monospace",fontSize:".55rem",cursor:"pointer",transition:"all .15s",textAlign:"center"}}>
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:10,marginTop:4}}>
+              <button className="action-btn" style={{flex:1}} onClick={saveEditHabit}>Save Changes</button>
+              <button className="action-btn danger" onClick={()=>setShowEditModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddModal&&(
         <div className="modal-overlay" onClick={()=>setShowAddModal(false)}>
@@ -1443,7 +1542,14 @@ export default function App() {
                     <span style={{fontFamily:"'Orbitron',monospace",fontSize:".48rem",color:TH.textFaint}}>{sectionHabits.filter(h=>h.completedToday).length}/{sectionHabits.length}</span>
                   </div>
                   {sectionHabits.map((habit,i)=>(
-              <div key={habit.id} className={`habit-card ${habit.completedToday?"completed":""}`} style={{animationDelay:`${i*.05}s`,opacity:0,animationFillMode:"forwards"}} onClick={()=>completeHabit(habit.id)}>
+                  <div key={habit.id} className={`habit-card ${habit.completedToday?"completed":""}`} style={{animationDelay:`${i*.05}s`,opacity:0,animationFillMode:"forwards"}}
+                  onClick={()=>completeHabit(habit.id)}
+                  onMouseDown={()=>startLongPress(habit)}
+                  onMouseUp={endLongPress}
+                  onMouseLeave={endLongPress}
+                  onTouchStart={()=>startLongPress(habit)}
+                  onTouchEnd={endLongPress}
+                  onTouchMove={endLongPress}>
                 <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:CATEGORY_COLORS[habit.category]||"#666",borderRadius:"12px 0 0 12px",opacity:habit.completedToday?.4:.8}}/>
                 <button className={`complete-btn ${habit.completedToday?"done":""}`} onClick={e=>{e.stopPropagation();completeHabit(habit.id);}}>{habit.completedToday?"✓":"○"}</button>
                 <div style={{fontSize:"1.5rem",flexShrink:0}}>{habit.icon}</div>
