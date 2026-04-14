@@ -25,12 +25,12 @@ const RANKS = [
 const AVATARS = ["💀","⚔️","🛡️","🏹","🧙","🦸","🥷","🧝","🐉","🦁","🐯","🦊","🦅","🌟","⚡","🔥","💎","🌙","🌊","🍀","🎯","💪","🧠","🚀","🎮","👑","🎭","🏆","🌈","🦄","🎸"];
 
 const DEFAULT_HABITS = [
-  { id:1, name:"10 Push-ups",       category:"Strength", xp:30, icon:"💪", completedToday:false },
-  { id:2, name:"20 Min Walk",        category:"Cardio",   xp:40, icon:"🚶", completedToday:false },
-  { id:3, name:"Drink 8 Glasses",   category:"Wellness", xp:20, icon:"💧", completedToday:false },
-  { id:4, name:"10 Min Meditation", category:"Mind",     xp:25, icon:"🧘", completedToday:false },
-  { id:5, name:"30 Min Reading",    category:"Mind",     xp:35, icon:"📚", completedToday:false },
-  { id:6, name:"15 Squats",         category:"Strength", xp:30, icon:"🏋️", completedToday:false },
+  { id:1, name:"10 Push-ups",       category:"Strength", xp:30, icon:"💪", completedToday:false, timeOfDay:"morning" },
+  { id:2, name:"20 Min Walk",        category:"Cardio",   xp:40, icon:"🚶", completedToday:false, timeOfDay:"morning" },
+  { id:3, name:"Drink 8 Glasses",   category:"Wellness", xp:20, icon:"💧", completedToday:false, timeOfDay:"afternoon" },
+  { id:4, name:"10 Min Meditation", category:"Mind",     xp:25, icon:"🧘", completedToday:false, timeOfDay:"morning" },
+  { id:5, name:"30 Min Reading",    category:"Mind",     xp:35, icon:"📚", completedToday:false, timeOfDay:"night" },
+  { id:6, name:"15 Squats",         category:"Strength", xp:30, icon:"🏋️", completedToday:false, timeOfDay:"afternoon" },
 ];
 
 const CATEGORY_COLORS = { Strength:"#FF6B35", Cardio:"#00CFCF", Wellness:"#4CAF50", Mind:"#9B59B6", Custom:"#FFD700" };
@@ -989,7 +989,7 @@ export default function App() {
   const [saveStatus,setSaveStatus]=useState("saved");
   const [xpPopups,setXpPopups]=useState([]);
   const [showAddModal,setShowAddModal]=useState(false);
-  const [newHabit,setNewHabit]=useState({name:"",category:"Custom",xp:25,icon:"⭐",scheduleType:"daily",scheduleDays:[]});
+  const [newHabit,setNewHabit]=useState({name:"",category:"Custom",xp:25,icon:"⭐",scheduleType:"daily",scheduleDays:[],timeOfDay:"morning"});
   const [activeTab,setActiveTab]=useState("habits");
   const [showConfetti,setShowConfetti]=useState(false);
   const [streakBanner,setStreakBanner]=useState(null);
@@ -1160,7 +1160,7 @@ export default function App() {
     });
   }
 
-  function addHabit(){if(!newHabit.name.trim())return;updateData(prev=>({habits:[...prev.habits,{...newHabit,id:Date.now(),completedToday:false}]}));setNewHabit({name:"",category:"Custom",xp:25,icon:"⭐",scheduleType:"daily",scheduleDays:[]});setShowAddModal(false);}
+  function addHabit(){if(!newHabit.name.trim())return;updateData(prev=>({habits:[...prev.habits,{...newHabit,id:Date.now(),completedToday:false}]}));setNewHabit({name:"",category:"Custom",xp:25,icon:"⭐",scheduleType:"daily",scheduleDays:[],timeOfDay:"morning"});setShowAddModal(false);}
   function removeHabit(id){updateData(prev=>({habits:prev.habits.filter(h=>h.id!==id)}));}
 
   async function enableNotifications(){
@@ -1285,7 +1285,15 @@ export default function App() {
             <input type="range" min="5" max="100" step="5" value={newHabit.xp} onChange={e=>setNewHabit(p=>({...p,xp:parseInt(e.target.value)}))} style={{accentColor:"#FFD700",width:"100%",marginBottom:14}}/>
 
             {/* Schedule Picker */}
-            <label style={{display:"block",color:TH.textMuted,fontSize:".75rem",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>Schedule</label>
+            <label style={{display:"block",color:TH.textMuted,fontSize:".75rem",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>Time of Day</label>
+            <div style={{display:"flex",gap:6,marginBottom:14}}>
+              {[{id:"morning",icon:"🌅",label:"Morning"},{id:"afternoon",icon:"☀️",label:"Afternoon"},{id:"night",icon:"🌙",label:"Night"}].map(t=>(
+                <button key={t.id} onClick={()=>setNewHabit(p=>({...p,timeOfDay:t.id}))} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1px solid ${newHabit.timeOfDay===t.id?"#FFD700":TH.border2}`,background:newHabit.timeOfDay===t.id?"linear-gradient(135deg,#1a1400,#2a2000)":"transparent",color:newHabit.timeOfDay===t.id?"#FFD700":TH.textFaint,fontFamily:"'Orbitron',monospace",fontSize:".5rem",cursor:"pointer",textTransform:"uppercase",letterSpacing:"1px",transition:"all .2s",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  <span style={{fontSize:"1rem"}}>{t.icon}</span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
             <div style={{display:"flex",gap:6,marginBottom:10}}>
               {["daily","weekly","monthly"].map(t=>(
                 <button key={t} onClick={()=>setNewHabit(p=>({...p,scheduleType:t,scheduleDays:[]}))} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1px solid ${newHabit.scheduleType===t?"#FFD700":TH.border2}`,background:newHabit.scheduleType===t?"linear-gradient(135deg,#1a1400,#2a2000)":"transparent",color:newHabit.scheduleType===t?"#FFD700":TH.textFaint,fontFamily:"'Orbitron',monospace",fontSize:".55rem",cursor:"pointer",textTransform:"uppercase",letterSpacing:"1px",transition:"all .2s"}}>
@@ -1423,7 +1431,18 @@ export default function App() {
               <button className="action-btn" style={{flex:1}} onClick={()=>setShowAddModal(true)}>+ Add Habit</button>
             </div>
             {todayHabits.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:TH.textFaint}}><div style={{fontSize:"3rem",marginBottom:10}}>🎯</div><div>{habits.length===0?"No habits yet!":"No habits scheduled for today!"}</div></div>}
-            {todayHabits.map((habit,i)=>(
+            {[{id:"morning",icon:"🌅",label:"Morning"},{id:"afternoon",icon:"☀️",label:"Afternoon"},{id:"night",icon:"🌙",label:"Night"}].map(section=>{
+              const sectionHabits=todayHabits.filter(h=>(h.timeOfDay||"morning")===section.id);
+              if(sectionHabits.length===0) return null;
+              return (
+                <div key={section.id}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,marginTop:10}}>
+                    <span style={{fontSize:"1.1rem"}}>{section.icon}</span>
+                    <span style={{fontFamily:"'Orbitron',monospace",fontSize:".55rem",color:TH.textFaint,letterSpacing:"2px",textTransform:"uppercase"}}>{section.label}</span>
+                    <div style={{flex:1,height:1,background:TH.border}}/>
+                    <span style={{fontFamily:"'Orbitron',monospace",fontSize:".48rem",color:TH.textFaint}}>{sectionHabits.filter(h=>h.completedToday).length}/{sectionHabits.length}</span>
+                  </div>
+                  {sectionHabits.map((habit,i)=>(
               <div key={habit.id} className={`habit-card ${habit.completedToday?"completed":""}`} style={{animationDelay:`${i*.05}s`,opacity:0,animationFillMode:"forwards"}} onClick={()=>completeHabit(habit.id)}>
                 <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:CATEGORY_COLORS[habit.category]||"#666",borderRadius:"12px 0 0 12px",opacity:habit.completedToday?.4:.8}}/>
                 <button className={`complete-btn ${habit.completedToday?"done":""}`} onClick={e=>{e.stopPropagation();completeHabit(habit.id);}}>{habit.completedToday?"✓":"○"}</button>
@@ -1442,8 +1461,11 @@ export default function App() {
                   +{Math.round((dailyStreak>=3?Math.floor(habit.xp*1.2):habit.xp)*(activeEvent?activeEvent.mult:1))}
                 </div>
                 <button className="icon-btn" onClick={e=>{e.stopPropagation();removeHabit(habit.id);}}>✕</button>
-              </div>
-            ))}
+                  </div>
+                  ))}
+                </div>
+              );
+            })}
             {habits.length>0&&completedCount<habits.length&&(
               <div style={{marginTop:8,padding:"10px 14px",background:TH.card2,borderRadius:8,border:`1px solid ${TH.border}`}}>
                 <div style={{fontSize:".62rem",color:TH.textFaint,fontFamily:"'Orbitron',monospace",letterSpacing:"1px"}}>📦 Complete ALL habits to unlock a Loot Box!</div>
