@@ -1490,7 +1490,9 @@ export default function App() {
           {nextRank?(
             <>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                <span style={{fontFamily:"'Orbitron',monospace",fontSize:".52rem",color:"#555"}}>{xp-rank.minXP} / {nextRank.minXP-rank.minXP} XP</span>
+                <span style={{fontFamily:"'Orbitron',monospace",fontSize:".52rem",color:"#555"}}>
+                  {xp.toLocaleString()} / {nextRank.minXP.toLocaleString()} XP
+                </span>
                 <span style={{fontFamily:"'Orbitron',monospace",fontSize:".52rem",color:rank.color}}>→ {nextRank.name} {nextRank.icon}</span>
               </div>
               <div className="progress-bar-container">
