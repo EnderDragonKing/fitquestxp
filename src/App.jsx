@@ -640,7 +640,7 @@ function MissionsTab({habits,appData,onMissionComplete,TH}) {
   );
 }
 
-// ── Calories Tab ──────────────────────────────────────────────────────────────
+
 // ── Calories Tab ──────────────────────────────────────────────────────────────
 function CaloriesTab({ appData, updateData, TH, showNotif }) {
   const [setupMode, setSetupMode] = useState(!appData.calorieSetupComplete);
@@ -846,31 +846,6 @@ function CaloriesTab({ appData, updateData, TH, showNotif }) {
     haptic([50]);
   }
 
-  // --- Sub-Components (Forms/Layouts) ---
-
-  const SetupForm = ({ onComplete, btnText }) => (
-    <div style={{ animation: "fadeInUp .3s ease" }}>
-      <label className="modal-label">Age</label>
-      <input type="number" placeholder="e.g. 28" value={formAge} onChange={e=>setFormAge(e.target.value)} />
-      
-      <label className="modal-label">Height (cm)</label>
-      <input type="number" placeholder="e.g. 175" value={formHeight} onChange={e=>setFormHeight(e.target.value)} />
-      
-      <label className="modal-label">Weight (kg)</label>
-      <input type="number" placeholder="e.g. 70" value={formWeight} onChange={e=>setFormWeight(e.target.value)} />
-      
-      <label className="modal-label">Weekly Goal</label>
-      <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
-        {[{id:"deficit",label:"Lose weight"},{id:"maintain",label:"Maintain"},{id:"gain",label:"Gain weight"}].map(g => (
-          <button key={g.id} onClick={() => setGoal(g.id)} style={{ flex: 1, padding: "10px 4px", borderRadius: 8, border: `1px solid ${formGoal === g.id ? "#FF6B35" : TH.border2}`, background: formGoal === g.id ? "linear-gradient(135deg,#1a0800,#2a1000)" : TH.inputBg, color: formGoal === g.id ? "#FF6B35" : TH.textFaint, fontFamily: "'Orbitron',monospace", fontSize: ".52rem", textTransform: "uppercase", cursor: "pointer", letterSpacing: 1, transition: "all .2s" }}>
-            {g.label}
-          </button>
-        ))}
-      </div>
-      <button className="action-btn" onClick={onComplete} style={{ width: "100%" }}>{btnText}</button>
-    </div>
-  );
-
   // --- Main Render ---
 
   if (setupMode) {
@@ -878,7 +853,28 @@ function CaloriesTab({ appData, updateData, TH, showNotif }) {
       <div style={{ background: TH.card, border: `1px solid ${TH.border}`, borderRadius: 12, padding: "24px 20px", textAlign: "center" }}>
         <div style={{ fontSize: "3.5rem", marginBottom: 10, animation:"float 3s ease infinite" }}>🍎</div>
         <h2 style={{ fontFamily: "'Cinzel Decorative',serif", color: "#FF6B35", margin: "0 0 16px", fontSize: "1.3rem" }}>Calorie Hero Setup</h2>
-        <SetupForm onComplete={handleSetupComplete} btnText="Create My Plan" />
+        
+        {/* Setup Form */}
+        <div style={{ animation: "fadeInUp .3s ease" }}>
+          <label style={{ display:"block", color:TH.textMuted, fontSize: ".55rem", marginBottom:4, textTransform:"uppercase", letterSpacing:1, fontFamily:"'Orbitron',monospace", textAlign:"left" }}>Age</label>
+          <input type="number" placeholder="e.g. 28" value={formAge} onChange={e=>setFormAge(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px 14px", borderRadius: 8, fontFamily: "'Rajdhani',sans-serif", fontSize: "1rem", outline: "none", boxSizing: "border-box", transition: "border-color .2s", marginBottom: 12 }} />
+          
+          <label style={{ display:"block", color:TH.textMuted, fontSize: ".55rem", marginBottom:4, textTransform:"uppercase", letterSpacing:1, fontFamily:"'Orbitron',monospace", textAlign:"left" }}>Height (cm)</label>
+          <input type="number" placeholder="e.g. 175" value={formHeight} onChange={e=>setFormHeight(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px 14px", borderRadius: 8, fontFamily: "'Rajdhani',sans-serif", fontSize: "1rem", outline: "none", boxSizing: "border-box", transition: "border-color .2s", marginBottom: 12 }} />
+          
+          <label style={{ display:"block", color:TH.textMuted, fontSize: ".55rem", marginBottom:4, textTransform:"uppercase", letterSpacing:1, fontFamily:"'Orbitron',monospace", textAlign:"left" }}>Weight (kg)</label>
+          <input type="number" placeholder="e.g. 70" value={formWeight} onChange={e=>setFormWeight(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px 14px", borderRadius: 8, fontFamily: "'Rajdhani',sans-serif", fontSize: "1rem", outline: "none", boxSizing: "border-box", transition: "border-color .2s", marginBottom: 12 }} />
+          
+          <label style={{ display:"block", color:TH.textMuted, fontSize: ".55rem", marginBottom:4, textTransform:"uppercase", letterSpacing:1, fontFamily:"'Orbitron',monospace", textAlign:"left" }}>Weekly Goal</label>
+          <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+            {[{id:"deficit",label:"Lose weight"},{id:"maintain",label:"Maintain"},{id:"gain",label:"Gain weight"}].map(g => (
+              <button key={g.id} onClick={() => setFormGoal(g.id)} style={{ flex: 1, padding: "10px 4px", borderRadius: 8, border: `1px solid ${formGoal === g.id ? "#FF6B35" : TH.border2}`, background: formGoal === g.id ? "linear-gradient(135deg,#1a0800,#2a1000)" : TH.inputBg, color: formGoal === g.id ? "#FF6B35" : TH.textFaint, fontFamily: "'Orbitron',monospace", fontSize: ".52rem", textTransform: "uppercase", cursor: "pointer", letterSpacing: 1, transition: "all .2s" }}>
+                {g.label}
+              </button>
+            ))}
+          </div>
+          <button className="action-btn" onClick={handleSetupComplete} style={{ width: "100%" }}>Create My Plan</button>
+        </div>
       </div>
     );
   }
@@ -893,7 +889,6 @@ function CaloriesTab({ appData, updateData, TH, showNotif }) {
     <div>
       {/* Modals styles */}
       <style>{`
-        .modal-label { display:block; color:${TH.textMuted}; fontSize: .55rem; marginBottom:4px; textTransform:uppercase; letterSpacing:1px; fontFamily:'Orbitron',monospace; textAlign:left; }
         .log-entry-card { background:${TH.habitCard}; border:1px solid ${TH.border}; borderRadius:10px; padding:10px; marginBottom:6px; display:flex; alignItems:center; gap:10px; animation:slideIn .2s ease; }
       `}</style>
 
@@ -982,7 +977,29 @@ function CaloriesTab({ appData, updateData, TH, showNotif }) {
         <div className="modal-overlay" onClick={() => setShowEditInfoModal(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <h2 style={{fontFamily:"'Cinzel Decorative',serif",color:"#FF6B35",margin:"0 0 16px",fontSize:"1.1rem"}}>✏️ Edit Fit Info</h2>
-            <SetupForm onComplete={handleSaveEditedInfo} btnText="Save Changes" />
+            
+            {/* Edit Info Form */}
+            <div style={{ animation: "fadeInUp .3s ease" }}>
+              <label style={{ display:"block", color:TH.textMuted, fontSize: ".55rem", marginBottom:4, textTransform:"uppercase", letterSpacing:1, fontFamily:"'Orbitron',monospace", textAlign:"left" }}>Age</label>
+              <input type="number" placeholder="e.g. 28" value={formAge} onChange={e=>setFormAge(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px 14px", borderRadius: 8, fontFamily: "'Rajdhani',sans-serif", fontSize: "1rem", outline: "none", boxSizing: "border-box", transition: "border-color .2s", marginBottom: 12 }} />
+              
+              <label style={{ display:"block", color:TH.textMuted, fontSize: ".55rem", marginBottom:4, textTransform:"uppercase", letterSpacing:1, fontFamily:"'Orbitron',monospace", textAlign:"left" }}>Height (cm)</label>
+              <input type="number" placeholder="e.g. 175" value={formHeight} onChange={e=>setFormHeight(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px 14px", borderRadius: 8, fontFamily: "'Rajdhani',sans-serif", fontSize: "1rem", outline: "none", boxSizing: "border-box", transition: "border-color .2s", marginBottom: 12 }} />
+              
+              <label style={{ display:"block", color:TH.textMuted, fontSize: ".55rem", marginBottom:4, textTransform:"uppercase", letterSpacing:1, fontFamily:"'Orbitron',monospace", textAlign:"left" }}>Weight (kg)</label>
+              <input type="number" placeholder="e.g. 70" value={formWeight} onChange={e=>setFormWeight(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px 14px", borderRadius: 8, fontFamily: "'Rajdhani',sans-serif", fontSize: "1rem", outline: "none", boxSizing: "border-box", transition: "border-color .2s", marginBottom: 12 }} />
+              
+              <label style={{ display:"block", color:TH.textMuted, fontSize: ".55rem", marginBottom:4, textTransform:"uppercase", letterSpacing:1, fontFamily:"'Orbitron',monospace", textAlign:"left" }}>Weekly Goal</label>
+              <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+                {[{id:"deficit",label:"Lose weight"},{id:"maintain",label:"Maintain"},{id:"gain",label:"Gain weight"}].map(g => (
+                  <button key={g.id} onClick={() => setFormGoal(g.id)} style={{ flex: 1, padding: "10px 4px", borderRadius: 8, border: `1px solid ${formGoal === g.id ? "#FF6B35" : TH.border2}`, background: formGoal === g.id ? "linear-gradient(135deg,#1a0800,#2a1000)" : TH.inputBg, color: formGoal === g.id ? "#FF6B35" : TH.textFaint, fontFamily: "'Orbitron',monospace", fontSize: ".52rem", textTransform: "uppercase", cursor: "pointer", letterSpacing: 1, transition: "all .2s" }}>
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+              <button className="action-btn" onClick={handleSaveEditedInfo} style={{ width: "100%" }}>Save Changes</button>
+            </div>
+
             <button className="action-btn danger" onClick={()=>setShowEditInfoModal(false)} style={{width:"100%",background:'none',marginTop:8}}>Cancel</button>
           </div>
         </div>
@@ -1985,7 +2002,7 @@ export default function App() {
 
         {activeTab==="missions"&&<MissionsTab habits={habits} appData={appData} onMissionComplete={handleMissionComplete} TH={TH}/>}
         {activeTab==="badges"&&<AchievementsTab badges={badges||[]} TH={TH}/>}
-        {activeTab==="calories"&&<CaloriesTab appData={appData} updateData={updateData} TH={TH}/>}
+        {activeTab==="calories"&&<CaloriesTab appData={appData} updateData={updateData} TH={TH} showNotif={showNotif}/>}
         {activeTab==="reports"&&<ReportsTab appData={appData} TH={TH}/>}
 
         {/* Ranks Tab */}
