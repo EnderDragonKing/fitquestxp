@@ -640,10 +640,142 @@ function MissionsTab({habits,appData,onMissionComplete,TH}) {
   );
 }
 
+// ── Calories Tab ──────────────────────────────────────────────────────────────
+function CaloriesTab({ appData, updateData, TH }) {
+  const [setupMode, setSetupMode] = useState(!appData.calorieSetupComplete);
+  const [age, setAge] = useState("");
+  const [height, setHeight] = useState("");
+  const [weight, setWeight] = useState("");
+  const [goal, setGoal] = useState("maintain");
+  
+  const [isScanning, setIsScanning] = useState(false);
+  const [pendingFood, setPendingFood] = useState(null);
+
+  const today = getTodayStr();
+  const caloriesToday = (appData.caloriesEatenByDate || {})[today] || 0;
+  const targetCalories = appData.calorieTarget || 2000;
+
+  function handleSetupComplete() {
+    if (!age || !height || !weight) return;
+    
+    // Basic BMR calculation (Mifflin-St Jeor)
+    const bmr = (10 * Number(weight)) + (6.25 * Number(height)) - (5 * Number(age)) + 5;
+    let target = Math.round(bmr * 1.2); // Base active multiplier
+    if (goal === "gain") target += 500;
+    if (goal === "deficit") target -= 500;
+
+    updateData(prev => ({
+      ...prev,
+      calorieSetupComplete: true,
+      calorieTarget: target,
+    }));
+    setSetupMode(false);
+  }
+
+  function handlePhotoUpload(e) {
+    if (!e.target.files || e.target.files.length === 0) return;
+    setIsScanning(true);
+    
+    // Mocking the AI vision API delay and calculation
+    setTimeout(() => {
+      setIsScanning(false);
+      setPendingFood(Math.floor(Math.random() * 600) + 150); // Random calories for mock
+    }, 1500);
+  }
+
+  function confirmEat(amount) {
+    updateData(prev => {
+      const history = prev.caloriesEatenByDate || {};
+      const current = history[today] || 0;
+      return {
+        ...prev,
+        caloriesEatenByDate: { ...history, [today]: current + amount }
+      };
+    });
+    setPendingFood(null);
+  }
+
+  if (setupMode) {
+    return (
+      <div style={{ background: TH.card, border: `1px solid ${TH.border}`, borderRadius: 12, padding: "20px", textAlign: "center" }}>
+        <div style={{ fontSize: "3rem", marginBottom: 10 }}>🍎</div>
+        <h2 style={{ fontFamily: "'Cinzel Decorative',serif", color: "#FF6B35", margin: "0 0 16px" }}>Calorie Setup</h2>
+        <button className="action-btn" onClick={() => setSetupMode("form")} style={{ display: setupMode === true ? "block" : "none", width: "100%" }}>
+          Start Calorie Counting
+        </button>
+
+        {setupMode === "form" && (
+          <div style={{ animation: "fadeInUp .3s ease" }}>
+            <input type="number" placeholder="Age" value={age} onChange={e=>setAge(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px", borderRadius: 8, marginBottom: 10 }} />
+            <input type="number" placeholder="Height (cm)" value={height} onChange={e=>setHeight(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px", borderRadius: 8, marginBottom: 10 }} />
+            <input type="number" placeholder="Weight (kg)" value={weight} onChange={e=>setWeight(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px", borderRadius: 8, marginBottom: 10 }} />
+            
+            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+              {["deficit", "maintain", "gain"].map(g => (
+                <button key={g} onClick={() => setGoal(g)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${goal === g ? "#FF6B35" : TH.border2}`, background: goal === g ? "linear-gradient(135deg,#1a0800,#2a1000)" : "transparent", color: goal === g ? "#FF6B35" : TH.textFaint, fontFamily: "'Orbitron',monospace", fontSize: ".55rem", textTransform: "uppercase", cursor: "pointer" }}>
+                  {g}
+                </button>
+              ))}
+            </div>
+            <button className="action-btn" onClick={handleSetupComplete} style={{ width: "100%" }}>Save & Start</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const isOver = caloriesToday > targetCalories;
+  const circleColor = isOver ? "#FF4444" : "#4CAF50";
+  const pct = Math.min((caloriesToday / targetCalories) * 100, 100);
+
+  return (
+    <div style={{ background: TH.card, border: `1px solid ${TH.border}`, borderRadius: 12, padding: "20px", textAlign: "center" }}>
+      <div style={{ fontFamily: "'Orbitron',monospace", fontSize: ".55rem", color: TH.textFaint, letterSpacing: "2px", marginBottom: 20 }}>TODAY'S CALORIES</div>
+      
+      {/* Central Circle */}
+      <div style={{ position: "relative", width: 180, height: 180, margin: "0 auto 24px", borderRadius: "50%", background: TH.inputBg, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: isOver ? "0 0 30px rgba(255,68,68,0.2)" : "none", transition: "all .3s" }}>
+        <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
+          <circle cx="90" cy="90" r="80" fill="none" stroke={TH.border} strokeWidth="10" />
+          <circle cx="90" cy="90" r="80" fill="none" stroke={circleColor} strokeWidth="10" strokeDasharray="502" strokeDashoffset={502 - (502 * pct) / 100} style={{ transition: "stroke-dashoffset 1s ease, stroke 0.5s ease" }} />
+        </svg>
+        <div>
+          <div style={{ fontFamily: "'Orbitron',monospace", fontSize: "1.8rem", color: circleColor, fontWeight: 700 }}>{caloriesToday}</div>
+          <div style={{ fontFamily: "'Orbitron',monospace", fontSize: ".7rem", color: TH.textFaint }}>/ {targetCalories} kcal</div>
+        </div>
+      </div>
+
+      {/* Warning State */}
+      {pendingFood !== null && (caloriesToday + pendingFood > targetCalories) ? (
+        <div style={{ background: "linear-gradient(135deg,#2a0000,#1a0000)", border: "1px solid #FF4444", borderRadius: 12, padding: "16px", animation: "fadeInUp .3s ease" }}>
+          <div style={{ fontSize: "2rem", marginBottom: 8 }}>⚠️</div>
+          <div style={{ fontFamily: "'Rajdhani',sans-serif", color: "#FF4444", fontSize: ".9rem", fontWeight: 700, marginBottom: 12 }}>
+            This meal is {pendingFood} kcal. If you eat this you will exceed the amount of calories you should be eating.
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="action-btn danger" onClick={() => setPendingFood(null)} style={{ flex: 1, fontSize: ".65rem" }}>I won't eat it</button>
+            <button className="action-btn" onClick={() => confirmEat(pendingFood)} style={{ flex: 1, fontSize: ".65rem", background: "transparent", borderColor: "#FF4444", color: "#FF4444" }}>I'm going to eat it</button>
+          </div>
+        </div>
+      ) : pendingFood !== null ? (
+        <div style={{ animation: "fadeInUp .3s ease" }}>
+          <div style={{ fontFamily: "'Rajdhani',sans-serif", color: TH.text, marginBottom: 12 }}>Food analyzed: <strong style={{ color: "#FFD700" }}>{pendingFood} kcal</strong></div>
+          <button className="action-btn" onClick={() => confirmEat(pendingFood)} style={{ width: "100%" }}>Add to Total</button>
+        </div>
+      ) : (
+        <label style={{ display: "block", background: "linear-gradient(135deg,#1a1400,#2a2000)", border: "1px solid #FFD700", color: "#FFD700", padding: "14px", borderRadius: 8, fontFamily: "'Orbitron',monospace", fontSize: ".8rem", cursor: "pointer", textTransform: "uppercase", letterSpacing: "1px" }}>
+          {isScanning ? "Analyzing..." : "📸 Scan Food"}
+          <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} disabled={isScanning} style={{ display: "none" }} />
+        </label>
+      )}
+    </div>
+  );
+}
+
 // ── Reports Tab ───────────────────────────────────────────────────────────────
 function ReportsTab({appData,TH}) {
   const [period,setPeriod]=useState("week");
   const xpHistory=appData.xpHistory||{};
+  const calorieHistory=appData.caloriesEatenByDate||{}; // Added line
   const today=new Date();
   const days=period==="week"?7:30;
   const chartData=[];
@@ -651,12 +783,13 @@ function ReportsTab({appData,TH}) {
     const d=new Date(today); d.setDate(d.getDate()-i);
     const ds=d.toISOString().slice(0,10);
     const label=period==="week"?["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()]:d.getDate().toString();
-    chartData.push({label,xp:xpHistory[ds]||0,date:ds});
+    chartData.push({label, xp:xpHistory[ds]||0, calories:calorieHistory[ds]||0, date:ds}); // Added calories
   }
   const totalXP=Object.values(xpHistory).reduce((a,b)=>a+b,0);
   const avgXP=chartData.length>0?Math.round(chartData.reduce((a,b)=>a+b.xp,0)/chartData.length):0;
   const bestDay=[...chartData].sort((a,b)=>b.xp-a.xp)[0];
   const activeDays=chartData.filter(d=>d.xp>0).length;
+  
   return (
     <div>
       <div style={{display:"flex",gap:6,marginBottom:14}}>
@@ -678,6 +811,21 @@ function ReportsTab({appData,TH}) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {/* NEW: Calories Chart */}
+      <div style={{background:TH.card,border:`1px solid ${TH.border}`,borderRadius:12,padding:"16px",marginBottom:12}}>
+        <div style={{fontFamily:"'Orbitron',monospace",fontSize:".55rem",color:TH.textFaint,letterSpacing:"2px",marginBottom:12}}>CALORIES EATEN</div>
+        <ResponsiveContainer width="100%" height={100}>
+          <BarChart data={chartData} margin={{top:4,right:4,bottom:4,left:-20}}>
+            <CartesianGrid strokeDasharray="3 3" stroke={TH.border} vertical={false}/>
+            <XAxis dataKey="label" tick={{fill:TH.textFaint,fontSize:10,fontFamily:"Orbitron,monospace"}} axisLine={false} tickLine={false}/>
+            <YAxis tick={{fill:TH.textFaint,fontSize:10,fontFamily:"Orbitron,monospace"}} axisLine={false} tickLine={false}/>
+            <Tooltip contentStyle={{background:TH.card,border:`1px solid ${TH.border}`,borderRadius:8,fontFamily:"Orbitron,monospace",fontSize:11}} labelStyle={{color:"#FF6B35"}} itemStyle={{color:"#FF6B35"}} formatter={v=>[v+" kcal","Eaten"]}/>
+            <Bar dataKey="calories" fill="#FF6B35" radius={[4,4,0,0]} opacity={0.85}/>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
         {[{label:"TOTAL XP",value:totalXP.toLocaleString(),color:"#FFD700",icon:"⚡"},{label:"DAILY AVG",value:avgXP+" XP",color:"#4CAF50",icon:"📊"},{label:"ACTIVE DAYS",value:`${activeDays}/${days}`,color:"#00CFCF",icon:"📅"},{label:"BEST DAY",value:bestDay&&bestDay.xp>0?bestDay.xp+" XP":"—",color:"#FF6B35",icon:"🔥"}].map(stat=>(
           <div key={stat.label} style={{background:TH.card,border:`1px solid ${TH.border}`,borderRadius:12,padding:"14px",textAlign:"center"}}>
@@ -1217,6 +1365,7 @@ export default function App() {
     {id:"habits",   icon:"💪", name:"Habits"},
     {id:"missions", icon:"🎯", name:"Missions"},
     {id:"badges",   icon:"🏆", name:"Badges"},
+    {id:"calories", icon:"🍎", name:"Calories"},
     {id:"reports",  icon:"📊", name:"Reports"},
     {id:"ranks",    icon:"🪨", name:"Ranks"},
     {id:"friends",  icon:"👥", name:"Friends"},
@@ -1584,6 +1733,7 @@ export default function App() {
 
         {activeTab==="missions"&&<MissionsTab habits={habits} appData={appData} onMissionComplete={handleMissionComplete} TH={TH}/>}
         {activeTab==="badges"&&<AchievementsTab badges={badges||[]} TH={TH}/>}
+        {activeTab==="calories"&&<CaloriesTab appData={appData} updateData={updateData} TH={TH}/>}
         {activeTab==="reports"&&<ReportsTab appData={appData} TH={TH}/>}
 
         {/* Ranks Tab */}
