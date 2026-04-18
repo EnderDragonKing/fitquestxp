@@ -641,85 +641,244 @@ function MissionsTab({habits,appData,onMissionComplete,TH}) {
 }
 
 // ── Calories Tab ──────────────────────────────────────────────────────────────
-function CaloriesTab({ appData, updateData, TH }) {
+// ── Calories Tab ──────────────────────────────────────────────────────────────
+function CaloriesTab({ appData, updateData, TH, showNotif }) {
   const [setupMode, setSetupMode] = useState(!appData.calorieSetupComplete);
-  const [age, setAge] = useState("");
-  const [height, setHeight] = useState("");
-  const [weight, setWeight] = useState("");
-  const [goal, setGoal] = useState("maintain");
   
+  // Modals
+  const [showEditCaloriesModal, setShowEditCaloriesModal] = useState(false);
+  const [showEditInfoModal, setShowEditInfoModal] = useState(false);
+
+  // Form States (for setup and edit info)
+  const [formAge, setFormAge] = useState(appData.userAge || "");
+  const [formHeight, setFormHeight] = useState(appData.userHeight || "");
+  const [formWeight, setFormWeight] = useState(appData.userWeight || "");
+  const [formGoal, setFormGoal] = useState(appData.userGoal || "maintain");
+  
+  // Scanning Workflow States
   const [isScanning, setIsScanning] = useState(false);
-  const [pendingFood, setPendingFood] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null); // base64 preview
+  const [pendingMimeType, setPendingMimeType] = useState("");
+  const [manualIngredients, setManualIngredients] = useState("");
+  const [aiAnalysisResult, setAiAnalysisResult] = useState(null); // { calories, thought }
 
   const today = getTodayStr();
-  const caloriesToday = (appData.caloriesEatenByDate || {})[today] || 0;
   const targetCalories = appData.calorieTarget || 2000;
+  
+  // Filter log entries for today
+  const dailyLog = (appData.calorieLog || []).filter(entry => entry.date === today);
+  const caloriesToday = dailyLog.reduce((sum, entry) => sum + entry.calories, 0);
 
-  function handleSetupComplete() {
-    if (!age || !height || !weight) return;
+  // --- Real AI Analysis Function ---
+  async function analyzeFoodImageWithAI(base64Image, mimeType, ingredients) {
+    // ⚠️ SECURITY WARNING: Hide this key in Firebase Functions before million-user launch!
+    const API_KEY = "YOUR_GEMINI_API_KEY"; 
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+
+    const prompt = `Analyze this food image. Estimate total calories. 
+    The user added this context/ingredients: "${ingredients}". Factor this heavily into the estimation (e.g., if they added sugar, oils, etc.).
     
+    Return your response in structured JSON format EXACTLY like this (no markdown, just raw JSON):
+    {
+      "calories": [integer representing total calories],
+      "analysis": "[one short sentence explaining how you calculated it, mentioning visible food and manual ingredients]"
+    }`;
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: mimeType, data: base64Image } }
+            ]
+          }]
+        })
+      });
+
+      if (!response.ok) throw new Error("API request failed");
+      
+      const data = await response.json();
+      const rawText = data.candidates[0].content.parts[0].text.trim();
+      
+      // Attempt to parse JSON
+      const jsonResult = JSON.parse(rawText.replace(/```json|```/g, "")); // Clean markdown if AI included it
+      return {
+        calories: parseInt(jsonResult.calories, 10) || 0,
+        analysis: jsonResult.analysis || "Analysis complete."
+      };
+    } catch (err) {
+      console.error("AI Error:", err);
+      // Fallback if AI fails or prompt structure is broken
+      return { calories: 300, analysis: "Could not analyze perfectly. Used a standard fallback estimate." };
+    }
+  }
+
+  // --- Workflow Handlers ---
+
+  function calculateTarget(age, height, weight, goal) {
     // Basic BMR calculation (Mifflin-St Jeor)
     const bmr = (10 * Number(weight)) + (6.25 * Number(height)) - (5 * Number(age)) + 5;
     let target = Math.round(bmr * 1.2); // Base active multiplier
     if (goal === "gain") target += 500;
     if (goal === "deficit") target -= 500;
+    return target;
+  }
 
+  function handleSetupComplete() {
+    if (!formAge || !formHeight || !formWeight) return;
+    const target = calculateTarget(formAge, formHeight, formWeight, formGoal);
     updateData(prev => ({
       ...prev,
       calorieSetupComplete: true,
       calorieTarget: target,
+      userAge: formAge, userHeight: formHeight, userWeight: formWeight, userGoal: formGoal,
+      calorieLog: prev.calorieLog || [] // Ensure log exists
     }));
     setSetupMode(false);
   }
 
-  function handlePhotoUpload(e) {
-    if (!e.target.files || e.target.files.length === 0) return;
-    setIsScanning(true);
-    
-    // Mocking the AI vision API delay and calculation
-    setTimeout(() => {
-      setIsScanning(false);
-      setPendingFood(Math.floor(Math.random() * 600) + 150); // Random calories for mock
-    }, 1500);
+  function handleSaveEditedInfo() {
+    if (!formAge || !formHeight || !formWeight) return;
+    const target = calculateTarget(formAge, formHeight, formWeight, formGoal);
+    updateData(prev => ({
+      ...prev,
+      calorieTarget: target,
+      userAge: formAge, userHeight: formHeight, userWeight: formWeight, userGoal: formGoal,
+    }));
+    setShowEditInfoModal(false);
+    showNotif("Info updated, daily target recalculated! 🎯");
   }
 
-  function confirmEat(amount) {
-    updateData(prev => {
-      const history = prev.caloriesEatenByDate || {};
-      const current = history[today] || 0;
-      return {
-        ...prev,
-        caloriesEatenByDate: { ...history, [today]: current + amount }
-      };
-    });
-    setPendingFood(null);
+  function handlePhotoUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPendingMimeType(file.type);
+    
+    // Show loading state immediately for preview
+    setIsScanning("reading");
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      // Result is data:image/jpeg;base64,... - we need full thing for img src
+      setImagePreview(reader.result); 
+      setIsScanning("idle"); // Done reading file, ready for user ingredients
+    };
+    reader.readAsDataURL(file);
   }
+
+  async function startAIAnalysis() {
+    setIsScanning("analyzing");
+    // Extract just raw base64 data for AI
+    const base64Data = imagePreview.split(',')[1];
+    
+    const result = await analyzeFoodImageWithAI(base64Data, pendingMimeType, manualIngredients);
+    
+    setAiAnalysisResult(result);
+    setIsScanning("idle");
+  }
+
+  async function confirmEat() {
+    setIsScanning("saving");
+    
+    let finalPhotoUrl = "🍎"; // Default if photo upload fails or is skipped
+
+    // ⏬ FIREBASE STORAGE INTEGRATION NEEDED HERE ⏬
+    // You MUST upload imagePreview (base64) to Firebase Storage here,
+    // get the download URL, and assign it to finalPhotoUrl.
+    // Storing raw base64 in calorieLog will break your DB on a live site.
+    //
+    // For now, I am creating a "session only" URL so the UI works,
+    // but this photo will disappear if they refresh.
+    try {
+      // In production, replace this block with real Storage upload
+      finalPhotoUrl = imagePreview; // TEMPORARY Session-only storage
+    } catch (e) { console.error("Photo log error", e); }
+
+    const newLogEntry = {
+      id: Date.now(),
+      date: today,
+      calories: aiAnalysisResult.calories,
+      photo: finalPhotoUrl,
+      ingredients: manualIngredients || "Analyzed from photo",
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    updateData(prev => ({
+      ...prev,
+      // Update historical eaten data for Reports Tab compatibility
+      caloriesEatenByDate: {
+        ...(prev.caloriesEatenByDate || {}),
+        [today]: (prev.caloriesEatenByDate?.[today] || 0) + aiAnalysisResult.calories
+      },
+      // Add detailed entry to new log
+      calorieLog: [newLogEntry, ...(prev.calorieLog || [])]
+    }));
+
+    // Reset workflow states
+    resetScanningWorkflow();
+    showNotif(`Logged ${newLogEntry.calories} kcal! 🍽️`);
+  }
+
+  function resetScanningWorkflow() {
+    setImagePreview(null);
+    setAiAnalysisResult(null);
+    setManualIngredients("");
+    setPendingMimeType("");
+    setIsScanning("idle");
+  }
+
+  function removeLogEntry(entryId, caloriesToAddBack) {
+    if(!window.confirm("Remove this meal from today's log?")) return;
+    
+    updateData(prev => ({
+      ...prev,
+      // Subtract from Reports Tab summary
+      caloriesEatenByDate: {
+        ...(prev.caloriesEatenByDate || {}),
+        [today]: Math.max(0, (prev.caloriesEatenByDate?.[today] || 0) - caloriesToAddBack)
+      },
+      // Delete from detailed log
+      calorieLog: (prev.calorieLog || []).filter(entry => entry.id !== entryId)
+    }));
+    haptic([50]);
+  }
+
+  // --- Sub-Components (Forms/Layouts) ---
+
+  const SetupForm = ({ onComplete, btnText }) => (
+    <div style={{ animation: "fadeInUp .3s ease" }}>
+      <label className="modal-label">Age</label>
+      <input type="number" placeholder="e.g. 28" value={formAge} onChange={e=>setFormAge(e.target.value)} />
+      
+      <label className="modal-label">Height (cm)</label>
+      <input type="number" placeholder="e.g. 175" value={formHeight} onChange={e=>setFormHeight(e.target.value)} />
+      
+      <label className="modal-label">Weight (kg)</label>
+      <input type="number" placeholder="e.g. 70" value={formWeight} onChange={e=>setFormWeight(e.target.value)} />
+      
+      <label className="modal-label">Weekly Goal</label>
+      <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+        {[{id:"deficit",label:"Lose weight"},{id:"maintain",label:"Maintain"},{id:"gain",label:"Gain weight"}].map(g => (
+          <button key={g.id} onClick={() => setGoal(g.id)} style={{ flex: 1, padding: "10px 4px", borderRadius: 8, border: `1px solid ${formGoal === g.id ? "#FF6B35" : TH.border2}`, background: formGoal === g.id ? "linear-gradient(135deg,#1a0800,#2a1000)" : TH.inputBg, color: formGoal === g.id ? "#FF6B35" : TH.textFaint, fontFamily: "'Orbitron',monospace", fontSize: ".52rem", textTransform: "uppercase", cursor: "pointer", letterSpacing: 1, transition: "all .2s" }}>
+            {g.label}
+          </button>
+        ))}
+      </div>
+      <button className="action-btn" onClick={onComplete} style={{ width: "100%" }}>{btnText}</button>
+    </div>
+  );
+
+  // --- Main Render ---
 
   if (setupMode) {
     return (
-      <div style={{ background: TH.card, border: `1px solid ${TH.border}`, borderRadius: 12, padding: "20px", textAlign: "center" }}>
-        <div style={{ fontSize: "3rem", marginBottom: 10 }}>🍎</div>
-        <h2 style={{ fontFamily: "'Cinzel Decorative',serif", color: "#FF6B35", margin: "0 0 16px" }}>Calorie Setup</h2>
-        <button className="action-btn" onClick={() => setSetupMode("form")} style={{ display: setupMode === true ? "block" : "none", width: "100%" }}>
-          Start Calorie Counting
-        </button>
-
-        {setupMode === "form" && (
-          <div style={{ animation: "fadeInUp .3s ease" }}>
-            <input type="number" placeholder="Age" value={age} onChange={e=>setAge(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px", borderRadius: 8, marginBottom: 10 }} />
-            <input type="number" placeholder="Height (cm)" value={height} onChange={e=>setHeight(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px", borderRadius: 8, marginBottom: 10 }} />
-            <input type="number" placeholder="Weight (kg)" value={weight} onChange={e=>setWeight(e.target.value)} style={{ width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px", borderRadius: 8, marginBottom: 10 }} />
-            
-            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-              {["deficit", "maintain", "gain"].map(g => (
-                <button key={g} onClick={() => setGoal(g)} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${goal === g ? "#FF6B35" : TH.border2}`, background: goal === g ? "linear-gradient(135deg,#1a0800,#2a1000)" : "transparent", color: goal === g ? "#FF6B35" : TH.textFaint, fontFamily: "'Orbitron',monospace", fontSize: ".55rem", textTransform: "uppercase", cursor: "pointer" }}>
-                  {g}
-                </button>
-              ))}
-            </div>
-            <button className="action-btn" onClick={handleSetupComplete} style={{ width: "100%" }}>Save & Start</button>
-          </div>
-        )}
+      <div style={{ background: TH.card, border: `1px solid ${TH.border}`, borderRadius: 12, padding: "24px 20px", textAlign: "center" }}>
+        <div style={{ fontSize: "3.5rem", marginBottom: 10, animation:"float 3s ease infinite" }}>🍎</div>
+        <h2 style={{ fontFamily: "'Cinzel Decorative',serif", color: "#FF6B35", margin: "0 0 16px", fontSize: "1.3rem" }}>Calorie Hero Setup</h2>
+        <SetupForm onComplete={handleSetupComplete} btnText="Create My Plan" />
       </div>
     );
   }
@@ -728,44 +887,137 @@ function CaloriesTab({ appData, updateData, TH }) {
   const circleColor = isOver ? "#FF4444" : "#4CAF50";
   const pct = Math.min((caloriesToday / targetCalories) * 100, 100);
 
+  const inputStyle = { width: "100%", background: TH.inputBg, border: `1px solid ${TH.border2}`, color: TH.text, padding: "10px", borderRadius: 8, fontFamily: "'Rajdhani',sans-serif", fontSize: "1rem", outline: "none", marginBottom: 12 };
+
   return (
-    <div style={{ background: TH.card, border: `1px solid ${TH.border}`, borderRadius: 12, padding: "20px", textAlign: "center" }}>
-      <div style={{ fontFamily: "'Orbitron',monospace", fontSize: ".55rem", color: TH.textFaint, letterSpacing: "2px", marginBottom: 20 }}>TODAY'S CALORIES</div>
-      
-      {/* Central Circle */}
-      <div style={{ position: "relative", width: 180, height: 180, margin: "0 auto 24px", borderRadius: "50%", background: TH.inputBg, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: isOver ? "0 0 30px rgba(255,68,68,0.2)" : "none", transition: "all .3s" }}>
-        <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
-          <circle cx="90" cy="90" r="80" fill="none" stroke={TH.border} strokeWidth="10" />
-          <circle cx="90" cy="90" r="80" fill="none" stroke={circleColor} strokeWidth="10" strokeDasharray="502" strokeDashoffset={502 - (502 * pct) / 100} style={{ transition: "stroke-dashoffset 1s ease, stroke 0.5s ease" }} />
-        </svg>
-        <div>
-          <div style={{ fontFamily: "'Orbitron',monospace", fontSize: "1.8rem", color: circleColor, fontWeight: 700 }}>{caloriesToday}</div>
-          <div style={{ fontFamily: "'Orbitron',monospace", fontSize: ".7rem", color: TH.textFaint }}>/ {targetCalories} kcal</div>
+    <div>
+      {/* Modals styles */}
+      <style>{`
+        .modal-label { display:block; color:${TH.textMuted}; fontSize: .55rem; marginBottom:4px; textTransform:uppercase; letterSpacing:1px; fontFamily:'Orbitron',monospace; textAlign:left; }
+        .log-entry-card { background:${TH.habitCard}; border:1px solid ${TH.border}; borderRadius:10px; padding:10px; marginBottom:6px; display:flex; alignItems:center; gap:10px; animation:slideIn .2s ease; }
+      `}</style>
+
+      {/* Main Dashboard */}
+      <div style={{ background: TH.card, border: `1px solid ${TH.border}`, borderRadius: 12, padding: "20px", textAlign: "center", marginBottom: 12 }}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div style={{ fontFamily: "'Orbitron',monospace", fontSize: ".55rem", color: TH.textFaint, letterSpacing: "2px" }}>TODAY'S CALORIES</div>
+          <button onClick={()=>setShowEditInfoModal(true)} style={{background:'none',border:`1px solid ${TH.border}`,color:TH.textMuted,fontFamily:"'Orbitron',monospace",fontSize:".5rem",padding:"4px 8px",borderRadius:6,cursor:'pointer'}}>EDIT INFO</button>
         </div>
+        
+        {/* Central Circle */}
+        <div style={{ position: "relative", width: 180, height: 180, margin: "0 auto 16px", borderRadius: "50%", background: TH.inputBg, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: isOver ? "0 0 30px rgba(255,68,68,0.2)" : "none", transition: "all .3s" }}>
+          <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
+            <circle cx="90" cy="90" r="80" fill="none" stroke={TH.border} strokeWidth="10" />
+            <circle cx="90" cy="90" r="80" fill="none" stroke={circleColor} strokeWidth="10" strokeDasharray="502" strokeDashoffset={502 - (502 * pct) / 100} style={{ transition: "stroke-dashoffset 1s ease, stroke 0.5s ease" }} strokeLinecap="round"/>
+          </svg>
+          <div>
+            <div style={{ fontFamily: "'Orbitron',monospace", fontSize: "1.8rem", color: circleColor, fontWeight: 700 }}>{caloriesToday}</div>
+            <div style={{ fontFamily: "'Orbitron',monospace", fontSize: ".7rem", color: TH.textFaint }}>/ {targetCalories} kcal</div>
+          </div>
+        </div>
+
+        <button onClick={()=>setShowEditCaloriesModal(true)} style={{background:isOver?'linear-gradient(135deg,#1a0000,#2a0000)':'linear-gradient(135deg,#1a1400,#2a2000)',border:`1px solid ${isOver?'#FF4444':'#FFD700'}`,color:isOver?'#FF4444':'#FFD700',padding:"8px 16px",borderRadius:8,fontFamily:"'Orbitron',monospace",fontSize:".55rem",textTransform:'uppercase',letterSpacing:1,cursor:'pointer'}}>
+          {isOver?'Manage Excess':'Edit Calories Eaten'}
+        </button>
       </div>
 
-      {/* Warning State */}
-      {pendingFood !== null && (caloriesToday + pendingFood > targetCalories) ? (
-        <div style={{ background: "linear-gradient(135deg,#2a0000,#1a0000)", border: "1px solid #FF4444", borderRadius: 12, padding: "16px", animation: "fadeInUp .3s ease" }}>
-          <div style={{ fontSize: "2rem", marginBottom: 8 }}>⚠️</div>
-          <div style={{ fontFamily: "'Rajdhani',sans-serif", color: "#FF4444", fontSize: ".9rem", fontWeight: 700, marginBottom: 12 }}>
-            This meal is {pendingFood} kcal. If you eat this you will exceed the amount of calories you should be eating.
+      {/* --- Scanning/Logging Section --- */}
+      <div style={{ background: TH.card, border: `1px solid ${TH.border}`, borderRadius: 12, padding: "16px", textAlign: "center" }}>
+        {isScanning === "reading" || isScanning === "saving" ? (
+          <div style={{padding:"40px 0"}}><div style={{fontSize:"2.5rem",marginBottom:10,animation:"float 1s ease infinite"}}>⌛</div><div style={{fontFamily:"'Orbitron',monospace",fontSize:".55rem",color:TH.textFaint}}>{isScanning.toUpperCase()}...</div></div>
+        ) : !imagePreview ? (
+          // 1. Initial State: Upload Button
+          <label style={{ display: "block", background: "linear-gradient(135deg,#001a10,#001a00)", border: "1px dashed #4CAF50", color: "#4CAF50", padding: "16px", borderRadius: 10, fontFamily: "'Orbitron',monospace", fontSize: ".8rem", cursor: "pointer", textTransform: "uppercase", letterSpacing: "1px", animation: isOver?"none":"pulse 2s infinite" }}>
+            📸 Scan Food
+            <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: "none" }} />
+          </label>
+        ) : !aiAnalysisResult ? (
+          // 2. Image Loaded: Show Preview + Ingredients Input + Analyze Button
+          <div style={{ animation: "fadeInUp .3s ease" }}>
+            <img src={imagePreview} style={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 8, marginBottom: 12, border:`2px solid ${TH.border}` }} alt="Food preview" />
+            <input 
+              type="text" 
+              placeholder="Add details (e.g. 1 tbsp sugar, salty sauce...)" 
+              value={manualIngredients}
+              style={inputStyle}
+              onChange={e=>setManualIngredients(e.target.value)}
+              disabled={isScanning === "analyzing"}
+            />
+            <div style={{display:'flex', gap:8}}>
+              <button className="action-btn" onClick={startAIAnalysis} style={{ flex: 1 }} disabled={isScanning === "analyzing"}>
+                {isScanning === "analyzing" ? "Analyzing..." : "Estimate Calories ✨"}
+              </button>
+              <button className="action-btn danger" onClick={resetScanningWorkflow} style={{padding:"10px 14px"}} disabled={isScanning === "analyzing"}>✕</button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="action-btn danger" onClick={() => setPendingFood(null)} style={{ flex: 1, fontSize: ".65rem" }}>I won't eat it</button>
-            <button className="action-btn" onClick={() => confirmEat(pendingFood)} style={{ flex: 1, fontSize: ".65rem", background: "transparent", borderColor: "#FF4444", color: "#FF4444" }}>I'm going to eat it</button>
+        ) : (
+          // 3. AI Result Received: Show Result + Confirm Button
+          <div style={{ animation: "fadeInUp .3s ease" }}>
+            <div style={{ display: "flex", gap: 12, alignItems: 'center', textAlign: 'left', background: TH.card2, padding: 10, borderRadius: 8, marginBottom: 12, border:`1px solid ${TH.border}` }}>
+              <img src={imagePreview} style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 6 }} alt="Analyzed food" />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "'Cinzel Decorative',serif", fontSize: "1.3rem", color: "#FFD700", fontWeight: 700 }}>{aiAnalysisResult.calories} kcal</div>
+                <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: ".75rem", color: TH.textMuted }}>{aiAnalysisResult.analysis}</div>
+              </div>
+            </div>
+
+            {/* Over Limit Warning */}
+            { caloriesToday + aiAnalysisResult.calories > targetCalories && (
+                <div style={{ background: "linear-gradient(135deg,#2a0000,#1a0000)", border: "1px solid #FF4444", borderRadius: 8, padding: "10px", color: "#FF4444", fontFamily: "'Rajdhani',sans-serif", fontSize: ".8rem", fontWeight: 700, marginBottom: 12, display:'flex',gap:6,alignItems:'center' }}>
+                  <span>⚠️</span>
+                  <span>This meal puts you { (caloriesToday + aiAnalysisResult.calories) - targetCalories } kcal over your limit.</span>
+                </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="action-btn danger" onClick={resetScanningWorkflow} style={{ flex: 1, fontSize: ".65rem" }}>Cancel</button>
+              <button className="action-btn" onClick={confirmEat} style={{ flex: 1, fontSize: ".65rem" }}>Log Meal</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* --- NEW MODAL: Edit Info --- */}
+      {showEditInfoModal && (
+        <div className="modal-overlay" onClick={() => setShowEditInfoModal(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h2 style={{fontFamily:"'Cinzel Decorative',serif",color:"#FF6B35",margin:"0 0 16px",fontSize:"1.1rem"}}>✏️ Edit Fit Info</h2>
+            <SetupForm onComplete={handleSaveEditedInfo} btnText="Save Changes" />
+            <button className="action-btn danger" onClick={()=>setShowEditInfoModal(false)} style={{width:"100%",background:'none',marginTop:8}}>Cancel</button>
           </div>
         </div>
-      ) : pendingFood !== null ? (
-        <div style={{ animation: "fadeInUp .3s ease" }}>
-          <div style={{ fontFamily: "'Rajdhani',sans-serif", color: TH.text, marginBottom: 12 }}>Food analyzed: <strong style={{ color: "#FFD700" }}>{pendingFood} kcal</strong></div>
-          <button className="action-btn" onClick={() => confirmEat(pendingFood)} style={{ width: "100%" }}>Add to Total</button>
+      )}
+
+      {/* --- NEW MODAL: Edit Calories Eaten (Daily Log) --- */}
+      {showEditCaloriesModal && (
+        <div className="modal-overlay" onClick={() => setShowEditCaloriesModal(false)}>
+          <div className="modal" style={{padding: "20px 16px", maxWidth: 440}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <h2 style={{fontFamily:"'Cinzel Decorative',serif",color:"#FFD700",margin:0,fontSize:"1rem"}}>Today's Meal Log</h2>
+              <div style={{fontFamily:"'Orbitron',monospace",fontSize:".7rem",color:TH.text,fontWeight:700}}>{caloriesToday} kcal</div>
+            </div>
+
+            <div style={{maxHeight: 350, overflowY: 'auto', paddingRight: 4}}>
+              {dailyLog.length === 0 && <div style={{textAlign:'center',padding:"30px 0",color:TH.textFaint,fontFamily:"'Rajdhani',sans-serif"}}>No meals logged today yet.</div>}
+              {dailyLog.map(entry => (
+                <div key={entry.id} className="log-entry-card">
+                  {/* Photo or Fallback */}
+                  { entry.photo && entry.photo.startsWith('data:') ? (
+                    <img src={entry.photo} style={{ width: 45, height: 45, objectFit: "cover", borderRadius: 6 }} alt="Log" />
+                  ) : <div style={{width:45,height:45,borderRadius:6,background:TH.card2,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.2rem',border:`1px solid ${TH.border}`}}>🍎</div> }
+                  
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:".9rem",color:TH.text}}>{entry.calories} kcal</div>
+                    <div style={{display:'flex',gap:6,marginTop:1}}><span style={{color:TH.textFaint,fontSize:".68rem",fontFamily:"'Rajdhani',sans-serif",maxWidth:140,textOverflow:'ellipsis',overflow:'hidden',whiteSpace:'nowrap'}}>{entry.ingredients}</span><span style={{color:TH.textFaint,fontSize:".65rem",fontFamily:"'Orbitron',monospace"}}>@{entry.timestamp}</span></div>
+                  </div>
+                  <button className="icon-btn" onClick={()=>removeLogEntry(entry.id, entry.calories)}>✕</button>
+                </div>
+              ))}
+            </div>
+
+            <button className="action-btn" onClick={()=>setShowEditCaloriesModal(false)} style={{width:"100%",marginTop:16, background:TH.card2, color:TH.text}}>Close Log</button>
+          </div>
         </div>
-      ) : (
-        <label style={{ display: "block", background: "linear-gradient(135deg,#1a1400,#2a2000)", border: "1px solid #FFD700", color: "#FFD700", padding: "14px", borderRadius: 8, fontFamily: "'Orbitron',monospace", fontSize: ".8rem", cursor: "pointer", textTransform: "uppercase", letterSpacing: "1px" }}>
-          {isScanning ? "Analyzing..." : "📸 Scan Food"}
-          <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} disabled={isScanning} style={{ display: "none" }} />
-        </label>
       )}
     </div>
   );
